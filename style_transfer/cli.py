@@ -11,13 +11,40 @@ import sys
 import webbrowser
 
 import numpy as np
-from PIL import Image, ImageCms
+from PIL import Image, ImageCms, ImageOps
 from tifffile import TIFF, TiffWriter
 import torch
 import torch.multiprocessing as mp
 from tqdm import tqdm
 
+
 from . import srgb_profile, StyleTransfer, WebInterface
+
+def resize_image(image, out_size):
+    ratio = image.size[0] / image.size[1]
+    area = min(image.size[0] * image.size[1], out_size[0] * out_size[1])
+    size = round((area * ratio)**0.5), round((area / ratio)**0.5)
+    return image.resize(size, Image.LANCZOS)
+
+# Color transfer - squish
+def transfer_color(src, dest): 
+    # Resize src to dest's size
+    W, H = dest.size
+    src = resize_image(src, (W, H) )
+    
+    dest_gray = dest.convert('L')  #1 Extract the Destination's luminance    
+    src_yiq = src.convert('YCbCr')   #2 Convert the Source from BGR to YIQ/YCbCr
+
+    dest_gray_numpy = np.asarray(dest_gray, dtype=np.uint8)
+    src_yiq_numpy = np.asarray(src_yiq, dtype=np.uint8)
+
+    src_yiq_numpy[...,0] = dest_gray_numpy                         #3 Combine Destination's luminance and Source's IQ/CbCr
+    
+    out = Image.fromarray(src_yiq_numpy, 'YCbCr') 
+
+    print('out mode: ' + str( src.mode ))
+
+    return out.convert('RGB')  #4 Convert new image from YIQ back to BGR
 
 
 def prof_to_prof(image, src_prof, dst_prof, **kwargs):
@@ -47,6 +74,7 @@ def load_image(path, proof_prof=None):
 
 
 def save_pil(path, image):
+    print("saving file to: " + str(path) + " with suffix of " + str(path.suffix))
     try:
         kwargs = {'icc_profile': srgb_profile}
         if path.suffix.lower() in {'.jpg', '.jpeg'}:
@@ -117,20 +145,24 @@ class Callback:
         self.iterates.append(asdict(iterate))
         if iterate.i == 1:
             self.progress = tqdm(total=iterate.i_max, dynamic_ncols=True)
-        msg = 'Size: {}x{}, iteration: {}, loss: {:g}'
-        tqdm.write(msg.format(iterate.w, iterate.h, iterate.i, iterate.loss))
+
+        if iterate.i % 50 == 0:
+            msg = 'Size: {}x{}, iteration: {}, loss: {:g}'
+            tqdm.write(msg.format(iterate.w, iterate.h, iterate.i, iterate.loss))
+        
         self.progress.update()
+
         if self.web_interface is not None:
             self.web_interface.put_iterate(iterate, self.st.get_image_tensor())
         if iterate.i == iterate.i_max:
             self.progress.close()
             if max(iterate.w, iterate.h) != self.args.end_scale:
-                save_image(self.args.output, self.st.get_image(self.image_type))
+                save_image(self.args.output_progress_file, self.st.get_image(self.image_type))
             else:
                 if self.web_interface is not None:
                     self.web_interface.put_done()
-        elif iterate.i % self.args.save_every == 0:
-            save_image(self.args.output, self.st.get_image(self.image_type))
+        elif self.args.save_every != -1 and iterate.i % self.args.save_every == 0:
+            save_image(self.args.output_progress_file, self.st.get_image(self.image_type))
 
     def close(self):
         if self.progress is not None:
@@ -156,6 +188,8 @@ def main():
     p.add_argument('styles', type=str, nargs='+', metavar='style', help='the style images')
     p.add_argument('--output', '-o', type=str, default='out.png',
                    help='the output image')
+    p.add_argument('--output_progress_file', '-op', type=str, default='output_progress_file.png',
+                   help='the output_progress_file image')
     p.add_argument('--style-weights', '-sw', type=float, nargs='+', default=None,
                    metavar='STYLE_WEIGHT', help='the relative weights for each style image')
     p.add_argument('--devices', type=str, default=[], nargs='+',
@@ -199,6 +233,10 @@ def main():
     p.add_argument('--browser', type=str, default='', nargs='?',
                    help='open a web browser (specify the browser if not system default)')
 
+
+    p.add_argument("--preserve-color",  action='store_true', dest='preserve_color')
+    p.add_argument("--scale-method", type=str, help="scale method", choices=['sqrt2','squish'], default='sqrt2', dest='scale_method')
+
     args = p.parse_args()
 
     content_img = load_image(args.content, args.proof)
@@ -211,6 +249,7 @@ def main():
     devices = [torch.device(device) for device in args.devices]
     if not devices:
         devices = [torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')]
+        print('cuda support: ' + str(torch.cuda.is_available() ))
     if len(set(device.type for device in devices)) != 1:
         print('Devices must all be the same type.')
         sys.exit(1)
@@ -261,6 +300,11 @@ def main():
         pass
 
     output_image = st.get_image(image_type)
+
+    if args.preserve_color:
+        print("attempting to preserve color")
+        output_image = transfer_color(content_img, output_image)        
+
     if output_image is not None:
         save_image(args.output, output_image)
     with open('trace.json', 'w') as fp:

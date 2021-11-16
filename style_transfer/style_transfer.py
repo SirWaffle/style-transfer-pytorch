@@ -210,14 +210,24 @@ def size_to_fit(size, max_dim, scale_up=False):
     return new_w, new_h
 
 
-def gen_scales(start, end):
+def gen_scales(start, end, method):
+    print("using scale method: " + str(method))
     scale = end
     i = 0
     scales = set()
     while scale >= start:
         scales.add(scale)
         i += 1
-        scale = round(end / pow(2, i/2))
+
+        if method == 'sqrt2':
+            scale = round(end / pow(2, i/2))
+        elif method == 'squish':
+            scale = round(scale / 2)
+        else:
+            scale = round(end / pow(2, i/2))
+
+        print("Adding scale: " + str(scale))
+
     return sorted(scales)
 
 
@@ -304,7 +314,8 @@ class StyleTransfer:
                 init: str = 'content',
                 style_scale_fac: float = 1.,
                 style_size: int = None,
-                callback=None):
+                callback=None,
+                scale_method: str = 'sqrt2'):
 
         min_scale = min(min_scale, end_scale)
         content_weights = [content_weight / len(self.content_layers)] * len(self.content_layers)
@@ -319,7 +330,7 @@ class StyleTransfer:
 
         tv_loss = Scale(LayerApply(TVLoss(), 'input'), tv_weight)
 
-        scales = gen_scales(min_scale, end_scale)
+        scales = gen_scales(min_scale, end_scale, scale_method)
 
         cw, ch = size_to_fit(content_image.size, scales[0], scale_up=True)
         if init == 'content':
