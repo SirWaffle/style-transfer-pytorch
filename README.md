@@ -2,7 +2,7 @@
 
 The only modification of interest I have made, is the addition of color preservation during style transfer:
 
-- '--preserve-color' preserve the coloration from the content image
+- `--preserve-color` preserve the coloration from the content image
 
 Everything else is the same as the forked project, and the original readme is included below
 
