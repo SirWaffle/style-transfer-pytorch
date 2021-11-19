@@ -1,4 +1,4 @@
-# the SirWaffle # style-transfer-pytorch Modifications
+# the SirWaffle style-transfer-pytorch Modifications
 
 The only modification of interest I have made, is the addition of color preservation during style transfer:
 
