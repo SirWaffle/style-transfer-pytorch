@@ -242,6 +242,8 @@ def main():
     content_img = load_image(args.content, args.proof)
     style_imgs = [load_image(img, args.proof) for img in args.styles]
 
+    print("Using pyTorch: " + str( torch.__version__) )
+
     image_type = 'pil'
     if Path(args.output).suffix.lower() in {'.tif', '.tiff'}:
         image_type = 'np_uint16'
