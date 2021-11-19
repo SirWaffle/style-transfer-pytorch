@@ -1,4 +1,14 @@
-# style-transfer-pytorch
+# the SirWaffle style-transfer-pytorch Modifications
+
+The only modification of interest I have made, is the addition of color preservation during style transfer:
+
+- `--preserve-color` preserve the coloration from the content image
+
+Everything else is the same as the forked project, and the original readme is included below
+
+
+
+# Original style-transfer-pytorch from fork
 
 An implementation of neural style transfer ([A Neural Algorithm of Artistic Style](https://arxiv.org/abs/1508.06576)) in PyTorch, supporting CPUs and Nvidia GPUs. It does automatic multi-scale (coarse-to-fine) stylization to produce high-quality high resolution stylizations, even up to print resolution if the GPUs have sufficient memory. If two GPUs are available, they can both be used to increase the maximum resolution. (Using two GPUs is not faster than using one.)
 
